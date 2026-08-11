@@ -15,7 +15,7 @@ CELL_SIZE = WIDTH // GRID_SIZE
 PARTICLE_SIZE = 6
 PARTICLE_MASS = 1.0
 ATOM_NUMBER = round(math.sqrt(400)) ** 2
-ATOM_PAIRS=ATOM_NUMBER*(ATOM_NUMBER-1)/2
+ATOM_PAIRS = ATOM_NUMBER * (ATOM_NUMBER - 1) / 2
 
 INITIAL_MAX_SPEED = 80
 AVG_ENERGY = (
@@ -23,18 +23,30 @@ AVG_ENERGY = (
     / 3
     * PARTICLE_MASS
 )
-CALCULATE_ENERGY = False
+BOUNDARY = False
+COLORED_HALVES = False
+
+OSMOTIC_BOUNDARY = False
+
+COLLISIONS = False
+FORCES = False
+DAMPING = False
+GRAVITY = False
+G = 10
 
 STEPS_PER_FRAME = 27
-CLAMP=False
+CLAMP = False
 
+TARGET_RATIO = 0.1  # Desired ratio of E to epsilon.
 
-TARGET_RATIO = 0.1 #Desired ration of E to epsilon
 # Lennard-Jones parameters.
 LJ_SIGMA = 2.0 * PARTICLE_SIZE
 LJ_EPSILON = AVG_ENERGY / TARGET_RATIO
 LJ_CUTOFF = 4 * LJ_SIGMA
 LJ_MIN_DISTANCE = 0.7 * LJ_SIGMA
+
+CALCULATE_ENERGY = False
+
 
 INSTRUCTIONS = f"""
 --- INITIAL PARAMETERS ---
@@ -46,14 +58,6 @@ Grid: {GRID_SIZE} x {GRID_SIZE}
 Grid-cell size: {CELL_SIZE} pixels
 Target frame rate: {FPS} FPS
 
-
---- MODEL ---
-Two-dimensional hard-disk ideal gas.
-Particles move freely between perfectly elastic collisions.
-Particle colors indicate which half of the container they occupy.
-
-Force mode uses a truncated Lennard-Jones interaction.
-
 --- CONTROLS ---
 SPACE  Toggle the central dividing wall
 R      Return all particles to the left half
@@ -63,18 +67,6 @@ F      Toggle Lennard-Jones forces
 H      Toggle coloring
 """
 
-BOUNDARY = False
-COLORED_HALVES = False
-
-OSMOTIC_BOUNDARY = False
-
-COLLISIONS = False
-FORCES = False
-DAMPING = False
-GRAVITY = False
-G=10
-
-
 class Atom:
     def __init__(
         self,
@@ -83,13 +75,15 @@ class Atom:
         vel: list[float],
         color: str = "lightblue",
         size: int = PARTICLE_SIZE,
-        mass: int = PARTICLE_MASS,
+        mass: float = PARTICLE_MASS,
         type: int = 0,
     ) -> None:
         self.x = float(x)
         self.y = float(y)
+
         self.vel = [float(vel[0]), float(vel[1])]
         self.acc = [0.0, 0.0]
+
         self.size = size
         self.color = color
         self.mass = mass
@@ -106,7 +100,6 @@ class Atom:
         top_wall = self.size
         bottom_wall = HEIGHT - self.size
 
-        # Reflect from the outer horizontal walls.
         if new_x < left_wall:
             new_x = 2.0 * left_wall - new_x
             self.vel[0] = abs(self.vel[0])
@@ -115,7 +108,6 @@ class Atom:
             new_x = 2.0 * right_wall - new_x
             self.vel[0] = -abs(self.vel[0])
 
-        # Reflect from the outer vertical walls.
         if new_y < top_wall:
             new_y = 2.0 * top_wall - new_y
             self.vel[1] = abs(self.vel[1])
@@ -141,7 +133,6 @@ class Atom:
             left_limit = middle - self.size
             right_limit = middle + self.size
 
-            # Correct a particle that somehow starts inside the wall.
             if left_limit < self.x < right_limit:
                 if self.vel[0] < 0:
                     self.x = left_limit
@@ -151,13 +142,13 @@ class Atom:
                     self.x = left_limit
                 else:
                     self.x = right_limit
-                    
+
                 new_x = self.x + dt * self.vel[0]
-            # Particle is on the left and attempts to cross the wall.
+
             if self.x <= left_limit and new_x > left_limit:
                 new_x = 2.0 * left_limit - new_x
                 self.vel[0] = -abs(self.vel[0])
-            # Particle is on the right and attempts to cross the wall.
+
             elif self.x >= right_limit and new_x < right_limit:
                 new_x = 2.0 * right_limit - new_x
                 self.vel[0] = abs(self.vel[0])
@@ -167,8 +158,7 @@ class Atom:
             left_limit = middle - self.size
             right_limit = middle + self.size
 
-            # Correct a particle that somehow starts inside the wall.
-            if left_limit < self.x < right_limit and self.type==0:
+            if left_limit < self.x < right_limit and self.type == 0:
                 if self.vel[0] < 0:
                     self.x = left_limit
                 elif self.vel[0] > 0:
@@ -177,15 +167,14 @@ class Atom:
                     self.x = left_limit
                 else:
                     self.x = right_limit
+
                 new_x = self.x + dt * self.vel[0]
 
-            # Particle is on the left and attempts to cross the wall.
-            if self.x <= left_limit and new_x > left_limit and self.type==0:
+            if self.x <= left_limit and new_x > left_limit and self.type == 0:
                 new_x = 2.0 * left_limit - new_x
                 self.vel[0] = -abs(self.vel[0])
 
-            # Particle is on the right and attempts to cross the wall.
-            elif self.x >= right_limit and new_x < right_limit and self.type==0:
+            elif self.x >= right_limit and new_x < right_limit and self.type == 0:
                 new_x = 2.0 * right_limit - new_x
                 self.vel[0] = abs(self.vel[0])
 
@@ -216,14 +205,15 @@ def reset_particles_to_left_half(particles: list[Atom]) -> None:
 
         particle.acc = [0.0, 0.0]
 
+
 def clear_accelerations(particles: list[Atom]) -> None:
     for particle in particles:
         particle.acc[0] = 0.0
         particle.acc[1] = 0.0
 
+
 def grid_coordinates(particle: Atom) -> tuple[int, int]:
     """Return safe grid coordinates for a particle."""
-
     grid_x = int(particle.x // CELL_SIZE)
     grid_y = int(particle.y // CELL_SIZE)
 
@@ -231,6 +221,7 @@ def grid_coordinates(particle: Atom) -> tuple[int, int]:
     grid_y = min(max(grid_y, 0), GRID_SIZE - 1)
 
     return grid_x, grid_y
+
 
 def build_grid(particles: list[Atom]) -> np.ndarray:
     grid = np.empty((GRID_SIZE, GRID_SIZE), dtype=object)
@@ -244,6 +235,7 @@ def build_grid(particles: list[Atom]) -> np.ndarray:
         grid[grid_y, grid_x].append(index)
 
     return grid
+
 
 def nearby_particle_indices(
     particle: Atom,
@@ -276,15 +268,15 @@ def lennard_jones_force(p1: Atom, p2: Atom) -> tuple[float, float]:
     dy = p1.y - p2.y
     distance_squared = dx * dx + dy * dy
     cutoff_squared = LJ_CUTOFF * LJ_CUTOFF
+
     if distance_squared >= cutoff_squared:
         return 0.0, 0.0
+
     if CLAMP and distance_squared < 1e-12:
-        # Give coincident particles a valid separation direction.
         angle = rnd.random() * 2.0 * math.pi
         dx = math.cos(angle)
         dy = math.sin(angle)
-        force_distance = 1
-        # Preserve the actual direction even when the magnitude is clamped.
+        force_distance = 1.0
         direction_x = dx / force_distance
         direction_y = dy / force_distance
     else:
@@ -292,7 +284,6 @@ def lennard_jones_force(p1: Atom, p2: Atom) -> tuple[float, float]:
         direction_x = dx / force_distance
         direction_y = dy / force_distance
 
-    # Limit the singular force at tiny separations.
     force_distance_squared = force_distance * force_distance
 
     sigma_squared_over_r_squared = (
@@ -302,7 +293,6 @@ def lennard_jones_force(p1: Atom, p2: Atom) -> tuple[float, float]:
     sigma_over_r_6 = sigma_squared_over_r_squared**3
     sigma_over_r_12 = sigma_over_r_6**2
 
-    # Force magnitude factor for F = factor * displacement.
     factor = (
         24.0
         * LJ_EPSILON
@@ -320,13 +310,13 @@ def lennard_jones_force(p1: Atom, p2: Atom) -> tuple[float, float]:
 
 def lennard_jones_potential(p1: Atom, p2: Atom) -> float:
     """Return a cutoff-shifted Lennard-Jones potential energy."""
-
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     distance_squared = dx * dx + dy * dy
 
     if distance_squared >= LJ_CUTOFF * LJ_CUTOFF:
         return 0.0
+
     if distance_squared < 1e-12 and CLAMP:
         return 0.0
 
@@ -339,7 +329,6 @@ def lennard_jones_potential(p1: Atom, p2: Atom) -> float:
         sigma_over_r_12 - sigma_over_r_6
     )
 
-    # Shift the potential so it reaches zero at the cutoff.
     sigma_over_cutoff_6 = (LJ_SIGMA / LJ_CUTOFF) ** 6
     sigma_over_cutoff_12 = sigma_over_cutoff_6**2
 
@@ -350,37 +339,201 @@ def lennard_jones_potential(p1: Atom, p2: Atom) -> float:
     return potential - cutoff_potential
 
 
+
+def candidate_pair_indices(
+    particles: list[Atom],
+    grid: np.ndarray,
+    cell_radius: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return unique candidate particle pairs from the spatial grid.
+
+    The grid search itself remains scalar because cells contain variable-length
+    Python lists. The expensive arithmetic for the resulting pairs is then
+    vectorized in NumPy.
+    """
+
+    pair_i: list[int] = []
+    pair_j: list[int] = []
+
+    for i1, p1 in enumerate(particles):
+        nearby_indices = nearby_particle_indices(
+            p1,
+            grid,
+            cell_radius,
+        )
+
+        for i2 in nearby_indices:
+            if i2 <= i1:
+                continue
+
+            pair_i.append(i1)
+            pair_j.append(i2)
+
+    return (
+        np.asarray(pair_i, dtype=np.intp),
+        np.asarray(pair_j, dtype=np.intp),
+    )
+
+
+def lennard_jones_forces_vectorized(
+    particles: list[Atom],
+    pair_i: np.ndarray,
+    pair_j: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute Lennard-Jones forces for candidate pairs in one NumPy batch.
+
+    Returns the filtered pair indices and the x/y force components acting on
+    particle i due to particle j.
+    """
+
+    if pair_i.size == 0:
+        empty_indices = np.empty(0, dtype=np.intp)
+        empty_values = np.empty(0, dtype=float)
+        return (
+            empty_indices,
+            empty_indices.copy(),
+            empty_values,
+            empty_values.copy(),
+        )
+
+    positions = np.asarray(
+        [(particle.x, particle.y) for particle in particles],
+        dtype=float,
+    )
+
+    displacement = positions[pair_i] - positions[pair_j]
+    distance_squared = np.einsum(
+        "ij,ij->i",
+        displacement,
+        displacement,
+    )
+
+    within_cutoff = distance_squared < LJ_CUTOFF * LJ_CUTOFF
+
+    pair_i = pair_i[within_cutoff]
+    pair_j = pair_j[within_cutoff]
+    displacement = displacement[within_cutoff]
+    distance_squared = distance_squared[within_cutoff]
+
+    if pair_i.size == 0:
+        empty_values = np.empty(0, dtype=float)
+        return pair_i, pair_j, empty_values, empty_values.copy()
+
+    coincident = distance_squared < 1e-12
+
+    # Preserve the scalar implementation's behavior. With CLAMP disabled,
+    # exactly coincident particles cause division by zero in the original
+    # lennard_jones_force().
+    if np.any(coincident) and not CLAMP:
+        raise ZeroDivisionError(
+            "Lennard-Jones force is undefined for coincident particles "
+            "when CLAMP is False."
+        )
+
+    force_distance_squared = distance_squared.copy()
+
+    if CLAMP and np.any(coincident):
+        coincident_indices = np.flatnonzero(coincident)
+
+        for index in coincident_indices:
+            angle = rnd.random() * 2.0 * math.pi
+            displacement[index, 0] = math.cos(angle)
+            displacement[index, 1] = math.sin(angle)
+
+        # This matches the original CLAMP branch, which sets
+        # force_distance = 1 for coincident particles.
+        force_distance_squared[coincident] = 1.0
+
+    sigma_squared_over_r_squared = (
+        LJ_SIGMA * LJ_SIGMA / force_distance_squared
+    )
+    sigma_over_r_6 = sigma_squared_over_r_squared**3
+    sigma_over_r_12 = sigma_over_r_6**2
+
+    factor = (
+        24.0
+        * LJ_EPSILON
+        / force_distance_squared
+        * (2.0 * sigma_over_r_12 - sigma_over_r_6)
+    )
+
+    # The scalar implementation computes:
+    # force_magnitude = factor * r
+    # direction = displacement / r
+    # so force = factor * displacement.
+    forces = factor[:, None] * displacement
+
+    return (
+        pair_i,
+        pair_j,
+        forces[:, 0],
+        forces[:, 1],
+    )
+
 def calculate_accelerations(
     particles: list[Atom],
     grid: np.ndarray,
 ) -> None:
-    clear_accelerations(particles)
+    """Calculate accelerations, vectorizing only the LJ pair arithmetic."""
 
-    search_radius = math.ceil(LJ_CUTOFF / CELL_SIZE)
+    particle_count = len(particles)
+    accelerations = np.zeros((particle_count, 2), dtype=float)
 
     if FORCES:
-        for i1, p1 in enumerate(particles):
-            nearby_indices = nearby_particle_indices(
-                p1,
-                grid,
-                search_radius,
+        search_radius = math.ceil(LJ_CUTOFF / CELL_SIZE)
+
+        pair_i, pair_j = candidate_pair_indices(
+            particles,
+            grid,
+            search_radius,
+        )
+
+        pair_i, pair_j, force_x, force_y = (
+            lennard_jones_forces_vectorized(
+                particles,
+                pair_i,
+                pair_j,
             )
-            for i2 in nearby_indices:
-                # Process every pair exactly once.
-                if i2 <= i1:
-                    continue
+        )
 
-                p2 = particles[i2]
-                force_x, force_y = lennard_jones_force(p1, p2)
+        masses = np.fromiter(
+            (particle.mass for particle in particles),
+            dtype=float,
+            count=particle_count,
+        )
 
-                p1.acc[0] += force_x / p1.mass
-                p1.acc[1] += force_y / p1.mass
+        # np.add.at is required because the same particle index can appear in
+        # many pairs. Ordinary advanced indexing with += would not reliably
+        # accumulate repeated indices.
+        np.add.at(
+            accelerations[:, 0],
+            pair_i,
+            force_x / masses[pair_i],
+        )
+        np.add.at(
+            accelerations[:, 1],
+            pair_i,
+            force_y / masses[pair_i],
+        )
+        np.add.at(
+            accelerations[:, 0],
+            pair_j,
+            -force_x / masses[pair_j],
+        )
+        np.add.at(
+            accelerations[:, 1],
+            pair_j,
+            -force_y / masses[pair_j],
+        )
 
-                p2.acc[0] -= force_x / p2.mass
-                p2.acc[1] -= force_y / p2.mass
     if GRAVITY:
-        for p1 in particles:
-            p1.acc[1] += G
+        accelerations[:, 1] += G
+
+    # Atom objects remain the canonical simulation state, so synchronization
+    # back to them happens once after the batched calculation.
+    for particle, acceleration in zip(particles, accelerations):
+        particle.acc[0] = float(acceleration[0])
+        particle.acc[1] = float(acceleration[1])
 
 
 def resolve_hard_disk_collisions(
@@ -397,7 +550,6 @@ def resolve_hard_disk_collisions(
         )
 
         for i2 in nearby_indices:
-            # Prevent duplicate pair processing.
             if i2 <= i1:
                 continue
 
@@ -423,8 +575,6 @@ def resolve_hard_disk_collisions(
                 normal_x = dx / distance
                 normal_y = dy / distance
 
-            # Separate overlapping particles. This prevents repeated
-            # collisions from the same unresolved overlap.
             overlap = minimum_distance - distance
 
             inverse_mass_1 = 1.0 / p1.mass
@@ -451,7 +601,6 @@ def resolve_hard_disk_collisions(
                 + relative_velocity_y * normal_y
             )
 
-            # A non-negative value means they are already separating.
             if relative_normal_speed >= 0.0:
                 continue
 
@@ -472,6 +621,7 @@ def resolve_hard_disk_collisions(
             p2.vel[0] -= impulse_x * inverse_mass_2
             p2.vel[1] -= impulse_y * inverse_mass_2
 
+
 def clamp_particle_position(particle: Atom) -> None:
     particle.x = min(
         max(particle.x, particle.size),
@@ -483,10 +633,11 @@ def clamp_particle_position(particle: Atom) -> None:
         HEIGHT - particle.size,
     )
 
+
 def update(
     particles: list[Atom],
     dt: float,
-) -> tuple[list[int], float]:
+) -> list[int] | None:
     """Advance the simulation by one physics timestep."""
 
     if FORCES:
@@ -495,7 +646,8 @@ def update(
             particle.vel[0] += 0.5 * dt * particle.acc[0]
             particle.vel[1] += 0.5 * dt * particle.acc[1]
 
-    # Drift.
+    # Drift. This stays scalar because move() contains branch-heavy wall and
+    # divider collision logic.
     for particle in particles:
         if DAMPING:
             particle.vel = [
@@ -505,7 +657,6 @@ def update(
 
         particle.move(dt)
 
-    # The spatial grid is only needed for particle-particle interactions.
     moved_grid = None
 
     if COLLISIONS or FORCES:
@@ -529,13 +680,12 @@ def update(
             particle.vel[1] += 0.5 * dt * particle.acc[1]
 
     elif GRAVITY:
-        # No interaction grid is needed for uniform gravity.
+        # Preserve the existing gravity-only integration behavior.
         clear_accelerations(particles)
 
         for particle in particles:
             particle.acc[1] += G
 
-        # Preserve the existing gravity integration behavior.
         for particle in particles:
             particle.vel[0] += 0.5 * dt * particle.acc[0]
             particle.vel[1] += 0.5 * dt * particle.acc[1]
@@ -554,7 +704,9 @@ def update(
     return None
 
 
-def calculate_energy(particles: list[Atom]) -> tuple[float, float, float]:
+def calculate_energy(
+    particles: list[Atom],
+) -> tuple[float, float, float, float]:
     kinetic_energy = sum(
         particle.kinetic_energy()
         for particle in particles
@@ -565,7 +717,9 @@ def calculate_energy(particles: list[Atom]) -> tuple[float, float, float]:
 
     if GRAVITY:
         for p in particles:
-            gravitational_potential_energy+=PARTICLE_MASS*G*(HEIGHT-p.y)
+            gravitational_potential_energy += (
+                PARTICLE_MASS * G * (HEIGHT - p.y)
+            )
 
     if FORCES:
         grid = build_grid(particles)
@@ -581,14 +735,27 @@ def calculate_energy(particles: list[Atom]) -> tuple[float, float, float]:
             for i2 in nearby_indices:
                 if i2 <= i1:
                     continue
+
                 potential_energy += lennard_jones_potential(
                     p1,
                     particles[i2],
-                )##LJ Potential is at 0 at the cutoff
+                )
+
+        # Preserve the original energy convention exactly.
         potential_energy += LJ_EPSILON * ATOM_PAIRS
 
-    total_energy = kinetic_energy + potential_energy + gravitational_potential_energy
-    return kinetic_energy, potential_energy, gravitational_potential_energy, total_energy
+    total_energy = (
+        kinetic_energy
+        + potential_energy
+        + gravitational_potential_energy
+    )
+
+    return (
+        kinetic_energy,
+        potential_energy,
+        gravitational_potential_energy,
+        total_energy,
+    )
 
 
 def handle_events(particles: list[Atom]) -> bool:
@@ -620,11 +787,9 @@ def handle_events(particles: list[Atom]) -> bool:
             BOUNDARY = False
             print(f"OSMOTIC_BOUNDARY_ACTIVE: {OSMOTIC_BOUNDARY}")
 
-
-
         elif event.key == pygame.K_r:
             reset_particles_to_left_half(particles)
-            print(f"Particles reset to left half")
+            print("Particles reset to left half")
 
         elif event.key == pygame.K_h:
             COLORED_HALVES = not COLORED_HALVES
@@ -654,33 +819,47 @@ def handle_events(particles: list[Atom]) -> bool:
                 calculate_accelerations(particles, initial_grid)
             else:
                 clear_accelerations(particles)
+
         elif event.key == pygame.K_d:
             DAMPING = not DAMPING
             print(f"DAMPING: {DAMPING}")
+
         elif event.key == pygame.K_g:
             GRAVITY = not GRAVITY
             print(f"GRAVITY: {GRAVITY}")
+
         elif event.key == pygame.K_e:
-            kinetic, potential, gravitational, total = calculate_energy(particles)
+            kinetic, potential, gravitational, total = calculate_energy(
+                particles
+            )
             print(
                 f"--Average Energy by Particle--\n"
-                f"K = {kinetic/ATOM_NUMBER:,.0f} | "
-                f"U = {potential/ATOM_NUMBER:,.0f} | "
-                f"G = {gravitational/ATOM_NUMBER:,.0f} | "
-                f"E = {total/ATOM_NUMBER:,.0f}"
+                f"K = {kinetic / ATOM_NUMBER:,.0f} | "
+                f"U = {potential / ATOM_NUMBER:,.0f} | "
+                f"G = {gravitational / ATOM_NUMBER:,.0f} | "
+                f"E = {total / ATOM_NUMBER:,.0f}"
             )
-            if CLAMP: print("LJ-Forces at small distances are being clamped. This violates conservation of energy!")
+
+            if CLAMP:
+                print(
+                    "LJ-Forces at small distances are being clamped. "
+                    "This violates conservation of energy!"
+                )
 
     return True
+
 
 def draw(
     screen: pygame.Surface,
     particles: list[Atom],
-    particle_distribution: list[int],
+    particle_distribution: list[int] | None,
 ) -> None:
     screen.fill("black")
 
-    if COLORED_HALVES or OSMOTIC_BOUNDARY:
+    if (
+        (COLORED_HALVES or OSMOTIC_BOUNDARY)
+        and particle_distribution is not None
+    ):
         pygame.display.set_caption(
             f"{particle_distribution[0]} "
             f"- Gas Simulation - "
@@ -695,6 +874,7 @@ def draw(
             end_pos=(WIDTH // 2, HEIGHT),
             width=2,
         )
+
     elif OSMOTIC_BOUNDARY:
         pygame.draw.line(
             screen,
@@ -703,16 +883,15 @@ def draw(
             end_pos=(WIDTH // 2, HEIGHT),
             width=2,
         )
-    if FORCES:
-        scale_factor = 0.9
-    else:
-        scale_factor = 1
+
+    scale_factor = 0.9 if FORCES else 1.0
+
     for particle in particles:
         pygame.draw.circle(
             screen,
             color=particle.color,
             center=(round(particle.x), round(particle.y)),
-            radius=scale_factor*particle.size,
+            radius=scale_factor * particle.size,
         )
 
     pygame.display.flip()
@@ -726,8 +905,6 @@ def create_particles() -> list[Atom]:
 
     for grid_x in range(particle_grid_size):
         for grid_y in range(particle_grid_size):
-            # Keeping particles near cell centers prevents initial
-            # near-overlaps when force mode is enabled.
             center_x = (grid_x + 0.5) * initial_cell_size
             center_y = (grid_y + 0.5) * initial_cell_size
 
@@ -758,7 +935,7 @@ def create_particles() -> list[Atom]:
                     y=y,
                     vel=velocity,
                     size=PARTICLE_SIZE,
-                    type=rnd.randint(0,1)
+                    type=rnd.randint(0, 1),
                 )
             )
 
@@ -774,13 +951,13 @@ def main() -> None:
     clock = pygame.time.Clock()
     particles = create_particles()
 
-    # Initialize accelerations only when Lennard-Jones forces are active.
     if FORCES:
         initial_grid = build_grid(particles)
         calculate_accelerations(
             particles,
             initial_grid,
         )
+
     elif GRAVITY:
         clear_accelerations(particles)
 
@@ -791,12 +968,9 @@ def main() -> None:
 
     running = True
 
-    # Fixed physics timestep:
-    # 80 frames/s × 20 steps/frame = 1600 physics steps/s.
     physics_dt = 1.0 / (FPS * STEPS_PER_FRAME)
 
     while running:
-        # Limit the rendered frame rate, not every physics substep.
         clock.tick(FPS)
 
         running = handle_events(particles)
@@ -806,7 +980,6 @@ def main() -> None:
 
         particle_distribution = None
 
-        # Perform all fixed physics substeps for this rendered frame.
         for _ in range(STEPS_PER_FRAME):
             particle_distribution = update(
                 particles,
