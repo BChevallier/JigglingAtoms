@@ -4,6 +4,17 @@ import random as rnd
 import numpy as np
 import pygame
 
+# PARAMS
+BOUNDARY = False
+COLORED_HALVES = False
+
+OSMOTIC_BOUNDARY = False
+
+COLLISIONS = False
+FORCES = False
+DAMPING = False
+GRAVITY = False
+G = 10
 
 WIDTH = 800
 HEIGHT = WIDTH  # The simulation currently assumes a square container.
@@ -23,16 +34,6 @@ AVG_ENERGY = (
     / 3
     * PARTICLE_MASS
 )
-BOUNDARY = False
-COLORED_HALVES = False
-
-OSMOTIC_BOUNDARY = False
-
-COLLISIONS = False
-FORCES = False
-DAMPING = False
-GRAVITY = False
-G = 10
 
 STEPS_PER_FRAME = 27
 CLAMP = False
@@ -46,6 +47,7 @@ LJ_CUTOFF = 4 * LJ_SIGMA
 LJ_MIN_DISTANCE = 0.7 * LJ_SIGMA
 
 CALCULATE_ENERGY = False
+
 
 
 INSTRUCTIONS = f"""
