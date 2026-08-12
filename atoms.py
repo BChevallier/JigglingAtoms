@@ -19,8 +19,8 @@ G = 10
 
 WIDTH = 800
 HEIGHT = WIDTH  # The simulation currently assumes a square container.
-FPS = 40
-STEPS_PER_FRAME = 38
+FPS = 60
+STEPS_PER_FRAME = 25
 
 PARTICLE_SIZE = 6
 PARTICLE_MASS = 1.0
@@ -970,7 +970,7 @@ def main() -> None:
                 physics_dt,
             )
 
-        print(clock.get_fps() // 1)
+        #print(clock.get_fps() // 1)
 
         draw(
             screen,
