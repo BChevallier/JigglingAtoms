@@ -1,5 +1,6 @@
 import math
 import random as rnd
+from collections.abc import Iterator
 
 import numpy as np
 import pygame
@@ -18,10 +19,8 @@ G = 10
 
 WIDTH = 800
 HEIGHT = WIDTH  # The simulation currently assumes a square container.
-FPS = 60
-
-GRID_SIZE = 30
-CELL_SIZE = WIDTH // GRID_SIZE
+FPS = 40
+STEPS_PER_FRAME = 38
 
 PARTICLE_SIZE = 6
 PARTICLE_MASS = 1.0
@@ -35,19 +34,20 @@ AVG_ENERGY = (
     * PARTICLE_MASS
 )
 
-STEPS_PER_FRAME = 27
 CLAMP = False
 
-TARGET_RATIO = 0.1  # Desired ratio of E to epsilon.
+TARGET_RATIO = 0.4  # Desired ratio of E to epsilon.
 
 # Lennard-Jones parameters.
-LJ_SIGMA = 2.0 * PARTICLE_SIZE
+LJ_SIGMA = 2.2 * PARTICLE_SIZE
 LJ_EPSILON = AVG_ENERGY / TARGET_RATIO
-LJ_CUTOFF = 4 * LJ_SIGMA
+LJ_CUTOFF = 3 * LJ_SIGMA
 LJ_MIN_DISTANCE = 0.7 * LJ_SIGMA
 
-CALCULATE_ENERGY = False
+GRID_SIZE = max(1, int(WIDTH / LJ_CUTOFF))
+CELL_SIZE = WIDTH / GRID_SIZE
 
+CALCULATE_ENERGY = False
 
 
 INSTRUCTIONS = f"""
@@ -68,6 +68,7 @@ C      Toggle hard-disk collisions
 F      Toggle Lennard-Jones forces
 H      Toggle coloring
 """
+
 
 class Atom:
     def __init__(
@@ -225,43 +226,91 @@ def grid_coordinates(particle: Atom) -> tuple[int, int]:
     return grid_x, grid_y
 
 
-def build_grid(particles: list[Atom]) -> np.ndarray:
-    grid = np.empty((GRID_SIZE, GRID_SIZE), dtype=object)
+Grid = list[list[list[int]]]
 
-    for grid_y in range(GRID_SIZE):
-        for grid_x in range(GRID_SIZE):
-            grid[grid_y, grid_x] = []
+
+def build_grid(particles: list[Atom]) -> Grid:
+    """Build a spatial grid containing each particle index exactly once."""
+
+    grid: Grid = [
+        [[] for _ in range(GRID_SIZE)]
+        for _ in range(GRID_SIZE)
+    ]
 
     for index, particle in enumerate(particles):
         grid_x, grid_y = grid_coordinates(particle)
-        grid[grid_y, grid_x].append(index)
+        grid[grid_y][grid_x].append(index)
 
     return grid
 
 
-def nearby_particle_indices(
-    particle: Atom,
-    grid: np.ndarray,
+def iter_candidate_pairs(
+    grid: Grid,
     cell_radius: int,
-) -> set[int]:
-    grid_x, grid_y = grid_coordinates(particle)
-    indices: set[int] = set()
+) -> Iterator[tuple[int, int]]:
+    """Yield each candidate particle pair exactly once.
 
-    for offset_y in range(-cell_radius, cell_radius + 1):
-        check_y = grid_y + offset_y
+    Pairs within one cell are emitted once. For distinct cells, only forward
+    cell pairs are visited: cells to the right on the same row, and cells on
+    later rows within ``cell_radius``. This eliminates duplicate pair searches
+    without using temporary sets.
+    """
 
-        if not 0 <= check_y < GRID_SIZE:
-            continue
+    for grid_y in range(GRID_SIZE):
+        for grid_x in range(GRID_SIZE):
+            current_cell = grid[grid_y][grid_x]
 
-        for offset_x in range(-cell_radius, cell_radius + 1):
-            check_x = grid_x + offset_x
-
-            if not 0 <= check_x < GRID_SIZE:
+            if not current_cell:
                 continue
 
-            indices.update(grid[check_y, check_x])
+            # Pairs within the current cell.
+            particle_count = len(current_cell)
+            for a in range(particle_count - 1):
+                i = current_cell[a]
+                for b in range(a + 1, particle_count):
+                    yield i, current_cell[b]
 
-    return indices
+            # Pairs between this cell and forward neighboring cells.
+            max_y = min(GRID_SIZE - 1, grid_y + cell_radius)
+            min_x = max(0, grid_x - cell_radius)
+            max_x = min(GRID_SIZE - 1, grid_x + cell_radius)
+
+            for neighbor_y in range(grid_y, max_y + 1):
+                for neighbor_x in range(min_x, max_x + 1):
+                    # On the current row, only cells to the right are new.
+                    # All cells in later rows have not yet been processed.
+                    if (
+                        neighbor_y == grid_y
+                        and neighbor_x <= grid_x
+                    ):
+                        continue
+
+                    neighbor_cell = grid[neighbor_y][neighbor_x]
+                    if not neighbor_cell:
+                        continue
+
+                    for i in current_cell:
+                        for j in neighbor_cell:
+                            yield i, j
+
+
+def candidate_pair_indices(
+    grid: Grid,
+    cell_radius: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return unique candidate pairs as NumPy index arrays."""
+
+    pair_i: list[int] = []
+    pair_j: list[int] = []
+
+    for i, j in iter_candidate_pairs(grid, cell_radius):
+        pair_i.append(i)
+        pair_j.append(j)
+
+    return (
+        np.asarray(pair_i, dtype=np.intp),
+        np.asarray(pair_j, dtype=np.intp),
+    )
 
 
 def lennard_jones_force(p1: Atom, p2: Atom) -> tuple[float, float]:
@@ -341,42 +390,6 @@ def lennard_jones_potential(p1: Atom, p2: Atom) -> float:
     return potential - cutoff_potential
 
 
-
-def candidate_pair_indices(
-    particles: list[Atom],
-    grid: np.ndarray,
-    cell_radius: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return unique candidate particle pairs from the spatial grid.
-
-    The grid search itself remains scalar because cells contain variable-length
-    Python lists. The expensive arithmetic for the resulting pairs is then
-    vectorized in NumPy.
-    """
-
-    pair_i: list[int] = []
-    pair_j: list[int] = []
-
-    for i1, p1 in enumerate(particles):
-        nearby_indices = nearby_particle_indices(
-            p1,
-            grid,
-            cell_radius,
-        )
-
-        for i2 in nearby_indices:
-            if i2 <= i1:
-                continue
-
-            pair_i.append(i1)
-            pair_j.append(i2)
-
-    return (
-        np.asarray(pair_i, dtype=np.intp),
-        np.asarray(pair_j, dtype=np.intp),
-    )
-
-
 def lennard_jones_forces_vectorized(
     particles: list[Atom],
     pair_i: np.ndarray,
@@ -423,9 +436,6 @@ def lennard_jones_forces_vectorized(
 
     coincident = distance_squared < 1e-12
 
-    # Preserve the scalar implementation's behavior. With CLAMP disabled,
-    # exactly coincident particles cause division by zero in the original
-    # lennard_jones_force().
     if np.any(coincident) and not CLAMP:
         raise ZeroDivisionError(
             "Lennard-Jones force is undefined for coincident particles "
@@ -442,8 +452,6 @@ def lennard_jones_forces_vectorized(
             displacement[index, 0] = math.cos(angle)
             displacement[index, 1] = math.sin(angle)
 
-        # This matches the original CLAMP branch, which sets
-        # force_distance = 1 for coincident particles.
         force_distance_squared[coincident] = 1.0
 
     sigma_squared_over_r_squared = (
@@ -459,10 +467,6 @@ def lennard_jones_forces_vectorized(
         * (2.0 * sigma_over_r_12 - sigma_over_r_6)
     )
 
-    # The scalar implementation computes:
-    # force_magnitude = factor * r
-    # direction = displacement / r
-    # so force = factor * displacement.
     forces = factor[:, None] * displacement
 
     return (
@@ -472,9 +476,10 @@ def lennard_jones_forces_vectorized(
         forces[:, 1],
     )
 
+
 def calculate_accelerations(
     particles: list[Atom],
-    grid: np.ndarray,
+    grid: Grid,
 ) -> None:
     """Calculate accelerations, vectorizing only the LJ pair arithmetic."""
 
@@ -485,7 +490,6 @@ def calculate_accelerations(
         search_radius = math.ceil(LJ_CUTOFF / CELL_SIZE)
 
         pair_i, pair_j = candidate_pair_indices(
-            particles,
             grid,
             search_radius,
         )
@@ -504,9 +508,6 @@ def calculate_accelerations(
             count=particle_count,
         )
 
-        # np.add.at is required because the same particle index can appear in
-        # many pairs. Ordinary advanced indexing with += would not reliably
-        # accumulate repeated indices.
         np.add.at(
             accelerations[:, 0],
             pair_i,
@@ -531,8 +532,6 @@ def calculate_accelerations(
     if GRAVITY:
         accelerations[:, 1] += G
 
-    # Atom objects remain the canonical simulation state, so synchronization
-    # back to them happens once after the batched calculation.
     for particle, acceleration in zip(particles, accelerations):
         particle.acc[0] = float(acceleration[0])
         particle.acc[1] = float(acceleration[1])
@@ -540,88 +539,85 @@ def calculate_accelerations(
 
 def resolve_hard_disk_collisions(
     particles: list[Atom],
-    grid: np.ndarray,
+    grid: Grid,
 ) -> None:
     """Resolve overlaps and perfectly elastic hard-disk collisions."""
 
-    for i1, p1 in enumerate(particles):
-        nearby_indices = nearby_particle_indices(
-            p1,
-            grid,
-            cell_radius=1,
+    # With equal particle sizes this is the largest possible collision
+    # distance. Keeping the calculation explicit makes the required grid
+    # neighborhood clear and remains correct if CELL_SIZE changes.
+    collision_distance = 2.0 * PARTICLE_SIZE
+    cell_radius = math.ceil(collision_distance / CELL_SIZE)
+
+    for i1, i2 in iter_candidate_pairs(grid, cell_radius):
+        p1 = particles[i1]
+        p2 = particles[i2]
+
+        dx = p1.x - p2.x
+        dy = p1.y - p2.y
+        distance_squared = dx * dx + dy * dy
+
+        minimum_distance = p1.size + p2.size
+        minimum_distance_squared = minimum_distance**2
+
+        if distance_squared >= minimum_distance_squared:
+            continue
+
+        if distance_squared < 1e-12:
+            angle = rnd.random() * 2.0 * math.pi
+            normal_x = math.cos(angle)
+            normal_y = math.sin(angle)
+            distance = 0.0
+        else:
+            distance = math.sqrt(distance_squared)
+            normal_x = dx / distance
+            normal_y = dy / distance
+
+        overlap = minimum_distance - distance
+
+        inverse_mass_1 = 1.0 / p1.mass
+        inverse_mass_2 = 1.0 / p2.mass
+        inverse_mass_sum = inverse_mass_1 + inverse_mass_2
+
+        correction_1 = overlap * inverse_mass_1 / inverse_mass_sum
+        correction_2 = overlap * inverse_mass_2 / inverse_mass_sum
+
+        p1.x += normal_x * correction_1
+        p1.y += normal_y * correction_1
+
+        p2.x -= normal_x * correction_2
+        p2.y -= normal_y * correction_2
+
+        clamp_particle_position(p1)
+        clamp_particle_position(p2)
+
+        relative_velocity_x = p1.vel[0] - p2.vel[0]
+        relative_velocity_y = p1.vel[1] - p2.vel[1]
+
+        relative_normal_speed = (
+            relative_velocity_x * normal_x
+            + relative_velocity_y * normal_y
         )
 
-        for i2 in nearby_indices:
-            if i2 <= i1:
-                continue
+        if relative_normal_speed >= 0.0:
+            continue
 
-            p2 = particles[i2]
+        restitution = 1.0
 
-            dx = p1.x - p2.x
-            dy = p1.y - p2.y
-            distance_squared = dx * dx + dy * dy
+        impulse_magnitude = (
+            -(1.0 + restitution)
+            * relative_normal_speed
+            / inverse_mass_sum
+        )
 
-            minimum_distance = p1.size + p2.size
-            minimum_distance_squared = minimum_distance**2
+        impulse_x = impulse_magnitude * normal_x
+        impulse_y = impulse_magnitude * normal_y
 
-            if distance_squared >= minimum_distance_squared:
-                continue
+        p1.vel[0] += impulse_x * inverse_mass_1
+        p1.vel[1] += impulse_y * inverse_mass_1
 
-            if distance_squared < 1e-12:
-                angle = rnd.random() * 2.0 * math.pi
-                normal_x = math.cos(angle)
-                normal_y = math.sin(angle)
-                distance = 0.0
-            else:
-                distance = math.sqrt(distance_squared)
-                normal_x = dx / distance
-                normal_y = dy / distance
-
-            overlap = minimum_distance - distance
-
-            inverse_mass_1 = 1.0 / p1.mass
-            inverse_mass_2 = 1.0 / p2.mass
-            inverse_mass_sum = inverse_mass_1 + inverse_mass_2
-
-            correction_1 = overlap * inverse_mass_1 / inverse_mass_sum
-            correction_2 = overlap * inverse_mass_2 / inverse_mass_sum
-
-            p1.x += normal_x * correction_1
-            p1.y += normal_y * correction_1
-
-            p2.x -= normal_x * correction_2
-            p2.y -= normal_y * correction_2
-
-            clamp_particle_position(p1)
-            clamp_particle_position(p2)
-
-            relative_velocity_x = p1.vel[0] - p2.vel[0]
-            relative_velocity_y = p1.vel[1] - p2.vel[1]
-
-            relative_normal_speed = (
-                relative_velocity_x * normal_x
-                + relative_velocity_y * normal_y
-            )
-
-            if relative_normal_speed >= 0.0:
-                continue
-
-            restitution = 1.0
-
-            impulse_magnitude = (
-                -(1.0 + restitution)
-                * relative_normal_speed
-                / inverse_mass_sum
-            )
-
-            impulse_x = impulse_magnitude * normal_x
-            impulse_y = impulse_magnitude * normal_y
-
-            p1.vel[0] += impulse_x * inverse_mass_1
-            p1.vel[1] += impulse_y * inverse_mass_1
-
-            p2.vel[0] -= impulse_x * inverse_mass_2
-            p2.vel[1] -= impulse_y * inverse_mass_2
+        p2.vel[0] -= impulse_x * inverse_mass_2
+        p2.vel[1] -= impulse_y * inverse_mass_2
 
 
 def clamp_particle_position(particle: Atom) -> None:
@@ -643,13 +639,10 @@ def update(
     """Advance the simulation by one physics timestep."""
 
     if FORCES:
-        # First half-kick using acceleration retained from the previous step.
         for particle in particles:
             particle.vel[0] += 0.5 * dt * particle.acc[0]
             particle.vel[1] += 0.5 * dt * particle.acc[1]
 
-    # Drift. This stays scalar because move() contains branch-heavy wall and
-    # divider collision logic.
     for particle in particles:
         if DAMPING:
             particle.vel = [
@@ -676,13 +669,11 @@ def update(
             moved_grid,
         )
 
-        # Second half-kick using acceleration at the new positions.
         for particle in particles:
             particle.vel[0] += 0.5 * dt * particle.acc[0]
             particle.vel[1] += 0.5 * dt * particle.acc[1]
 
     elif GRAVITY:
-        # Preserve the existing gravity-only integration behavior.
         clear_accelerations(particles)
 
         for particle in particles:
@@ -727,21 +718,14 @@ def calculate_energy(
         grid = build_grid(particles)
         search_radius = math.ceil(LJ_CUTOFF / CELL_SIZE)
 
-        for i1, p1 in enumerate(particles):
-            nearby_indices = nearby_particle_indices(
-                p1,
-                grid,
-                search_radius,
+        for i1, i2 in iter_candidate_pairs(
+            grid,
+            search_radius,
+        ):
+            potential_energy += lennard_jones_potential(
+                particles[i1],
+                particles[i2],
             )
-
-            for i2 in nearby_indices:
-                if i2 <= i1:
-                    continue
-
-                potential_energy += lennard_jones_potential(
-                    p1,
-                    particles[i2],
-                )
 
         # Preserve the original energy convention exactly.
         potential_energy += LJ_EPSILON * ATOM_PAIRS
@@ -886,14 +870,12 @@ def draw(
             width=2,
         )
 
-    scale_factor = 0.9 if FORCES else 1.0
-
     for particle in particles:
         pygame.draw.circle(
             screen,
             color=particle.color,
             center=(round(particle.x), round(particle.y)),
-            radius=scale_factor * particle.size,
+            radius=particle.size,
         )
 
     pygame.display.flip()
@@ -987,6 +969,8 @@ def main() -> None:
                 particles,
                 physics_dt,
             )
+
+        print(clock.get_fps() // 1)
 
         draw(
             screen,
