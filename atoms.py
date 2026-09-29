@@ -789,7 +789,7 @@ def handle_events(particles: list[Atom]) -> bool:
                 for particle in particles:
                     particle.color = "lightblue"
 
-                pygame.display.set_caption("Gas Simulation")
+                pygame.display.set_caption("Jiggling Atoms")
 
         elif event.key == pygame.K_c:
             COLLISIONS = not COLLISIONS
@@ -852,7 +852,7 @@ def draw(
     ):
         pygame.display.set_caption(
             f"{particle_distribution[0]} "
-            f"- Gas Simulation - "
+            f"- Jiggling Atoms - "
             f"{particle_distribution[1]}"
         )
 
@@ -934,7 +934,7 @@ def main() -> None:
     pygame.init()
 
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Gas Simulation")
+    pygame.display.set_caption("Jiggling Atoms")
 
     clock = pygame.time.Clock()
     particles = create_particles()
