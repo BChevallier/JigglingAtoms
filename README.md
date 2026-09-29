@@ -1,4 +1,4 @@
-# Gas Simulations
+# Jiggling Atoms
 
 Interactive visualisations of how simple microscopic rules — particles bouncing off each other, atoms pulling
 and pushing through the Lennard-Jones potential — give rise to macroscopic gas behaviour such as diffusion,
@@ -19,8 +19,8 @@ simulations use pixels and seconds as units, and parameters are chosen to look g
 Requires Python 3.10 or newer (developed on 3.14) and works on macOS, Linux and Windows.
 
 ```bash
-git clone https://github.com/BChevallier/Gas_Simulations.git
-cd Gas_Simulations
+git clone https://github.com/BChevallier/JigglingAtoms.git
+cd JigglingAtoms
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install numpy scipy matplotlib pygame opencv-python
