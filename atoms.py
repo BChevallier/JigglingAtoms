@@ -61,12 +61,16 @@ Grid-cell size: {CELL_SIZE} pixels
 Target frame rate: {FPS} FPS
 
 --- CONTROLS ---
-SPACE  Toggle the central dividing wall
+C      Toggle hard-disk collisions (turns forces off)
+F      Toggle Lennard-Jones forces (turns collisions off; not while wall is up)
+G      Toggle gravity (only acts while forces are off)
+D      Toggle damping
+B      Toggle the central dividing wall (not while forces are on)
+O      Toggle the osmotic membrane (blocks red particles, lets blue through)
 R      Return all particles to the left half
+H      Toggle coloring by half (left/right counts shown in window title)
+E      Print average energy per particle
 ESC    Exit the simulation
-C      Toggle hard-disk collisions
-F      Toggle Lennard-Jones forces
-H      Toggle coloring
 """
 
 

@@ -45,6 +45,7 @@ ATOM_NUMBER = round(math.sqrt(2000)) ** 2
 ATOM_PAIRS = ATOM_NUMBER * (ATOM_NUMBER - 1) / 2
 
 INITIAL_MAX_SPEED = 80
+FAST_PARTICLE_VELOCITY = (2000.0, 2000.0)  # px/s, the one moving particle
 AVG_ENERGY = INITIAL_MAX_SPEED**2 / 3 * PARTICLE_MASS
 
 CLAMP = False
@@ -85,8 +86,8 @@ distribution of particle speeds.
 --- SIMULATION ---
 Particles:           {ATOM_NUMBER}
 Particle radius:     {PARTICLE_SIZE} px
-Initial fast vx:     1200 px/s
-Initial fast vy:     1200 px/s
+Initial fast vx:     {FAST_PARTICLE_VELOCITY[0]:g} px/s
+Initial fast vy:     {FAST_PARTICLE_VELOCITY[1]:g} px/s
 Physics steps/frame: {STEPS_PER_FRAME}
 Target frame rate:   {FPS} FPS
 
@@ -590,7 +591,7 @@ def create_particles() -> list[Atom]:
             )
 
     particles[0].color = "red"
-    particles[0].vel = [2000.0, 2000.0]
+    particles[0].vel = list(FAST_PARTICLE_VELOCITY)
     return particles
 
 
