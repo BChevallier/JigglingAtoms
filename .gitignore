@@ -1,0 +1,11 @@
+# Claude context docs (local only)
+CLAUDE.md
+changelog.md
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated recordings
+*.mp4
