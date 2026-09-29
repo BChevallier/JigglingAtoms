@@ -38,14 +38,14 @@ PHYSICS_STEPS_PER_FRAME = 80
 # PHYSICAL CONSTANTS
 # ============================================================
 
-ATOMIC_MASS_UNIT = 1.660_539_066_60e-27  # kg (CODATA 2018)
-BOLTZMANN_CONSTANT = 1.380_649e-23       # J/K (exact, SI 2019)
+ATOMIC_MASS_UNIT = 1.660_539_066_60e-27  # kg
+BOLTZMANN_CONSTANT = 1.380_649e-23       # J/K
 
 # ============================================================
 # ARGON PARAMETERS
 # ============================================================
 
-ARGON_ATOMIC_MASS_U = 39.948  # IUPAC standard atomic weight
+ARGON_ATOMIC_MASS_U = 39.948
 
 ARGON_PARTICLE_MASS = (
     ARGON_ATOMIC_MASS_U * ATOMIC_MASS_UNIT
@@ -55,11 +55,6 @@ ARGON_PARTICLE_MASS = (
 # Therefore, the reduced moving mass is one argon mass.
 r_PARTICLE_MASS = 1.0
 
-# Standard 12-6 Lennard-Jones parameters for argon, fitted to second virial
-# coefficient data: J. O. Hirschfelder, C. F. Curtiss and R. B. Bird,
-# "Molecular Theory of Gases and Liquids", Wiley, New York (1954).
-# Other fits exist (e.g. ~124 K / 3.42 Å from viscosity); these are
-# effective parameters, not the exact argon dimer potential.
 LJ_SIGMA = 3.405e-10  # m
 
 LJ_EPSILON_OVER_K = 119.8  # K
