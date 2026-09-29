@@ -1,8 +1,13 @@
 import math
+import sys
 import matplotlib
 
 # Must be set before importing pyplot.
-matplotlib.use("MacOSX")
+# PyCharm's plot pane (backend_interagg) can't run animations or sliders,
+# so swap it for a native GUI backend. Otherwise matplotlib picks the
+# right backend for the OS (override with the MPLBACKEND env var).
+if "interagg" in matplotlib.get_backend().lower():
+    matplotlib.use("macosx" if sys.platform == "darwin" else "TkAgg")
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
