@@ -9,3 +9,6 @@ __pycache__/
 
 # Generated recordings
 *.mp4
+
+# IDE settings
+.idea/
