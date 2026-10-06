@@ -12,3 +12,6 @@ __pycache__/
 
 # IDE settings
 .idea/
+
+# short clip for the website, deliberately tracked
+!media/condensation.mp4
